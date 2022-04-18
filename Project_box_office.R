@@ -5,7 +5,9 @@ library(lubridate)
 library(ggplot2)
 library(readr)
 library(broom)
-
+library(lattice)
+library(Rcpp)
+library(caret)
 
 ####DATASETS
 ratings = readr::read_tsv("data.tsv")
@@ -60,9 +62,29 @@ actor$knownForTitles <- as.factor(actor$knownForTitles)
 
 df <- read.csv("movies.csv")
 summary(df)
+head(df)
 
 ###########################
 ##### DATA PREPARATION#####
 ###########################
+df$released <- gsub(",","", df$released)
+df$released <- gsub("(United States)","", df$released)
+df$released <- substr(df$released,1,nchar(df$released)-2)
+view(df)
+df$released <- as.Date(df$released, "%B %d %Y")
+summary(df) ##### WE NEED TO MAKE THIS BETTER - SOME NUMBERS ARE WRONG
+
+### HISTOGRAM
+hist <- hist(df$released, "years")
 
 
+
+###########################
+##### SPLITTING DATASET#### WE CAN IMPROVE THIS LATTER
+###########################
+splitter = runif(nrow(df))
+head(df)
+## splitting dataset
+train = filter(df, splitter < 0.7)
+test = filter(df, splitter >= 0.7)
+view(train)
