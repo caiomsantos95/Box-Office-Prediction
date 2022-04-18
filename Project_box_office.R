@@ -12,11 +12,8 @@ ratings = readr::read_tsv("data.tsv")
 actor = readr::read_tsv("data-2.tsv")
 movies = readr::read_tsv("data-3.tsv")
 metadata = readr::read_tsv("data-4.tsv")
-kaggle_OG <- readr::read_csv("train.csv")
-
-kaggle <- readr::read_csv("train.csv")
-
-kaggle
+#kaggle_OG <- readr::read_csv("train.csv")
+#kaggle <- readr::read_csv("train.csv")
 
 library(skimr)
 head(metadata)
@@ -25,14 +22,17 @@ head(ratings)
 head(movies)
 head(kaggle_train)
 summary(kaggle_train$release_date)
-
 summary(actor)
+
+##################################
+###### KAGGLE DATASET#############
+##################################
 
 ##################################
 ########DATA PREPARATION##########
 ##################################
 
-###### KAGGLE DATASET
+
 ##### FIXING DATES IN THE DATASET
 library(lubridate)
 library(tidyverse)
@@ -53,5 +53,16 @@ head(enriched_dataset)
 
 ###FACTORIZATION
 actor$knownForTitles <- as.factor(actor$knownForTitles)
+
+######################################################################################################
+
+########IMDB WEB SCRAPPED DATASET##################
+
+df <- read.csv("movies.csv")
+summary(df)
+
+###########################
+##### DATA PREPARATION#####
+###########################
 
 
