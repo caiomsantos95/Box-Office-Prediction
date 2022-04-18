@@ -51,3 +51,7 @@ summary(kaggle$release_date)
 enriched_dataset <- merge(x = kaggle, y = ratings, by.x = "imdb_id", by.y = "tconst")
 head(enriched_dataset)
 
+###FACTORIZATION
+actor$knownForTitles <- as.factor(actor$knownForTitles)
+
+
