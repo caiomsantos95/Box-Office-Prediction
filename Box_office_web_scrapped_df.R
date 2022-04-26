@@ -13,8 +13,7 @@ library(skimr)
 library(rpart)
 
 ####DATASETS
-movies <- readr::read_tsv("data-3.tsv")
-movies <- movies %>% filter(titleType == "movie")
+movies <- readr::read_csv("imdb_movies.csv")
 movies$movie_id <- movies$tconst
 head(movies)
 tail(movies )
@@ -98,7 +97,16 @@ df <- merge(x = df, y = document_terms, by.x = 0, by.y = 0)
 ### ADJUSTIN RUNTIME
 df$runtimeMinutes <- as.numeric(df$runtimeMinutes)
 
-### CREATE CURRENCY EXCHANGE RATE TABLE TO UPDATE VALUES FROM INTERNATIONAL MOVIES
+### CREATE CURRENCY EXCHANGE RATE TABLE TO UPDATE VALUES FROM INTERNATIONAL MOVIES - REPLICATE FOR ALL CURRENCIES
+install.packages("priceR")
+library(priceR)
+USD_GBP <- historical_exchange_rates("USD", to = "GBP", start_date = "2010-01-01", end_date = "2021-12-31")
+USD_GBP$year <- year(USD_GBP$date)
+table(USD_GBP$year, mean(USD_GBP$one_USD_equivalent_to_x_GBP))
+
+summary <- summarise(USD_GBP, group_by(USD_GBP$year), avg_USD_GBP = mean(USD_GBP$one_USD_equivalent_to_x_GBP))
+summary
+
 
 ### TRAINING THE MODEL WITH USD BUDGET ONLY UNTIL CONVERSION IS OK
 df_usd <- df %>% filter(df$`budget currency` == "USD")
