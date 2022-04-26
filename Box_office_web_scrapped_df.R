@@ -14,6 +14,7 @@ library(rpart)
 
 ####DATASETS
 movies <- readr::read_csv("imdb_movies.csv")
+head(movies)
 movies$movie_id <- movies$tconst
 head(movies)
 tail(movies )
