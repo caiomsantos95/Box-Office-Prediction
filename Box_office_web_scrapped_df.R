@@ -15,21 +15,28 @@ library(rpart)
 ####DATASETS
 movies <- readr::read_csv("imdb_movies.csv")
 head(movies)
-movies$movie_id <- movies$tconst
-head(movies)
 tail(movies )
 head(web_scrapping)
-skim(movies)
-summary(web_scrapping)
-summary(movies)
+df_2018_2019 <-readr::read_csv("movies_2018_2019.csv")
 df_2016_17 <- readr::read_csv("movies_2016_2017.csv")
 df_2015 <- readr::read_csv("movies_2015.csv")
-web_scrapping <- union(df_2016_17, df_2015)
-view(web_scrapping)
+df_2014 <-  readr::read_csv("movies_2014.csv")
+df_2010_2013 <-  readr::read_csv("movies_2010_2013.csv")
+df_2009 <-  readr::read_csv("movies_2009.csv")
+df_2008 <-  readr::read_csv("movies_2008.csv")
+df_2005_2007 <-  readr::read_csv("movies_2005_2008.csv")
+view(df_2005_2007)
 
-### DEBUGGING
-#smallfoot <- movies %>% filter(primaryTitle == "Smallfoot")
-#smallfoot
+### STACKING ALL DATABASES TOGETHER
+web_1 <- union(df_2018_2019, df_2016_17) 
+web_2 <- union(web_1, df_2015)
+web_3 <- union(web_2, df_2014)
+web_4 <- union(web_3, df_2010_2013)
+web_5 <- union(web_4, df_2009)
+web_6 <- union(web_5, df_2008)
+web_scrapping <- union(web_6, df_2005_2007)
+
+summary(web_scrapping)
 
 ###########################
 ##### DATA PREPARATION#####
@@ -85,6 +92,7 @@ df <- merge(x = df, y = movies, by.x = "movie_id", by.y = "tconst", all.x=TRUE)
 
 ### ADJUSTING GENRES
 library(tm)
+?tm
 corpus <- Corpus(VectorSource(df$genres)) 
 strwrap(corpus[[2]])
 f <- content_transformer(function(doc, oldtext, newtext) gsub(oldtext, newtext, doc)) 
@@ -95,6 +103,34 @@ frequencies
 document_terms = as.data.frame(as.matrix(frequencies))
 
 df <- merge(x = df, y = document_terms, by.x = 0, by.y = 0)
+
+### ADJUSTING DIRECTORS, STAR, WRITERS AND COMPANIES
+df <- data.frame(df)
+
+### DIRECTORS
+df <- df %>% group_by(df$director) %>% mutate(director_count=n())
+#df <- df %>% filter(director_count >= "5")
+df$director_adjusted <-ifelse(df$director_count < 5, "Other Director", df$director)
+hist(df$director_count)
+table(df$director)
+
+### STARS
+df <- df %>% group_by(df$star) %>% mutate(star_count=n())
+#df <- df %>% filter(director_count >= "8")
+df$star_adjusted <-ifelse(df$star_count < 8, "Other Star", df$star)
+hist(df$star_count)
+
+### WRITERS
+df <- df %>% group_by(df$writer) %>% mutate(writer_count=n())
+#df <- df %>% filter(director_count >= "8")
+df$writer_adjusted <-ifelse(df$writer_count < 5, "Other Writer", df$writer)
+hist(df$writer_count)
+
+### COMPANIES
+df <- df %>% group_by(df$company) %>% mutate(company_count=n())
+#df <- df %>% filter(director_count >= "8")
+df$company_adjusted <-ifelse(df$company_count < 30, "Other Company", df$company)
+hist(df$company_count)
 
 ### ADJUSTIN RUNTIME
 df$runtimeMinutes <- as.numeric(df$runtimeMinutes)
@@ -108,62 +144,78 @@ table(USD_GBP$year, mean(USD_GBP$one_USD_equivalent_to_x_GBP))
 
 summary <- summarise(USD_GBP, group_by(USD_GBP$year), avg_USD_GBP = mean(USD_GBP$one_USD_equivalent_to_x_GBP))
 
-### TRAINING THE MODEL WITH USD BUDGET ONLY UNTIL CONVERSION IS OK
-df_usd <- df %>% filter(df$`budget currency` == "USD")
-view(df_usd)
-
 ### ORDERING RATING
 unique(df$rating)
 df$rating <- ifelse(df$rating == "Not Rated" | is.na(df$rating) == TRUE , "Unrated", df$rating)
 rating.levels = c("G", "PG", "PG-13", "NC-17", "R", "Unrated")
 df$rating <- factor(df$rating, ordered=TRUE, levels=rating.levels)
 
+### TRAINING THE MODEL WITH USD BUDGET ONLY UNTIL CONVERSION IS OK
+df_usd <- df %>% filter(budget.currency == "USD")
+view(df_usd)
+
 ### DROPPING COLUMNS
-df_usd <- subset(df_usd, select = - c(movie_url, budget, gross, runtime, originalTitle, titleType, endYear, movie_id.y, Row.names, genres))
+df_usd <- subset(df_usd, select = - c(movie_url, budget, 
+                                      gross, runtime, originalTitle, 
+                                      titleType, endYear, Row.names, 
+                                      genres, director, writer, star, 
+                                      budget.currency, company, startYear))
+
+df_usd <- subset(df_usd, select = - c(...1, `df$director`, `df$star`, `df$writer`, `df$company`))
 
 ### FACTORIZATION
-df_usd$director <- factor(df_usd$director)
-df_usd$writer <- factor(df_usd$writer)
-df_usd$star <- factor(df_usd$star)
+df_usd$director <- factor(df_usd$director_adjusted)
+df_usd$writer <- factor(df_usd$writer_adjusted)
+df_usd$star <- factor(df_usd$star_adjusted)
 df_usd$country <- factor(df_usd$country)
-df_usd$company <- factor(df_usd$company)
+df_usd$company <- factor(df_usd$company_adjusted)
 
 ### SOME OTHER ADJUSTEMENTS
-df_usd <- subset(df_usd, select = - c(...1))
-df_usd <- subset(df_usd, select = - c(isAdult))
-
+#df_usd <- subset(df_usd, select = - c(...1))
+#df_usd <- subset(df_usd, select = - c(isAdult))
 
 skim(df_usd)
 
 ######################################
 ##### DATA EXPLORATION ###############
 ######################################
-hist <- hist(df_usd$released, "weeks")
+hist_week <- hist(df_usd$week_widely_released)
+hist_year <- hist(df_usd$year_widely_released)
+
 
 ###########################
-##### SPLITTING DATASET#### CHANGE LATER TO MOVIES UP 2017 (TEST IS 2018 and 2019 - 2020 and 2021 are going to be tests)
+##### SPLITTING DATASET#### 
 ###########################
 head(df_usd)
 ## splitting dataset
-train <- filter(df_usd, released <= "2016-12-31")
-test <- filter(df_usd, released >= "2017-01-01")
-view(train)
+train <- filter(df_usd, released <= "2017-12-31" & released >= "2000-01-01")
+test <- filter(df_usd, released >= "2018-01-01")
+summary(train)
+skim(train)
 view(test)
+view(train)
+
+
+hist_year_train <- hist(train$year_widely_released)
 
 ######################################
 ##### MODEL ##########################
 ######################################
 
-### LINEAR REGRESSION
+### LINEAR REGRESSION - NOT WORKING
 lm.1 <- lm(
-  train$`gross value` ~ . -movie_id - `budget currency` - `gross currency` - primaryTitle - startYear,
-  data = train)
+  train$gross.value ~ .,  data = train)
 summary(lm.1)
 
+lm.2 <- lm(
+  train$gross.value ~ train$budget.value, train$week_widely_released, train$runtimeMinutes, train$director_count, train$director_adjusted,
+  data = train)
+summary(lm.2)
 
-#### OUT OF SAMPLE R2 SQUARED
-pred_train = predict(lm.1, newdata=train)
-pred_test <- predict(lm.1, newdata=test)
+
+#### R2
+pred_train = predict(lm.2, newdata=train)
+pred_test <- predict(lm.2, newdata=test)
 
 SSR_test2 = sum((test$`gross value` - pred_test)^2)
 baseline_train = mean(train$`gross value`)
@@ -171,10 +223,12 @@ SST_test2 = sum((test$`gross value` - baseline_train)^2)
 OSR2_2 = 1 - SSR_test2 / SST_test2
 OSR2_2
 
+########################################################################################################################################################################################################################
+
 ### CART MODEL
 library(rpart.plot)
 cv.trees <- train(y = train$`gross value`,
-                  x = subset(train, select=c(`gross value`, movie_id, primaryTitle, `budget currency`, `gross currency`, startYear)),
+                  x = subset(train, select=-c(`gross value`, movie_id, primaryTitle, `budget currency`, `gross currency`, startYear, year_widely_released, year, rating, company, writer)),
                   method = "rpart", 
                   trControl = trainControl(method = "cv", number = 10), 
                   tuneGrid = data.frame(.cp = seq(.00001,.0003,.000001)))
@@ -182,40 +236,36 @@ cv.trees$bestTune
 cv.results = cv.trees$results
 cv.results
 
-cart.model <- rpart(train$`gross value` ~. - movie_id - primaryTitle, data = train, control = rpart.control(cp = 0.000054))
+cart.model <- rpart(train$`gross value` ~. -`gross value` - movie_id - primaryTitle - `budget currency` - `gross currency` - startYear - year_widely_released - year - rating - company - writer, data = train, control = rpart.control(cp = 0.000254))
 prp(cart.model, digits = 2, type = 2)
 
-r2_osr2_glmnet(cart.model, train, test, train$`gross value`, test$`gross value`, )
+### R2
+pred_train_cart = predict(cart.model, newdata=train)
+pred_test_cart <- predict(cart.model, newdata=test)
 
-#### FUNCTION FOR R2
+SSR_test_cart = sum((test$`gross value` - pred_test_cart)^2)
+baseline_train_cart = mean(train$`gross value`)
+SST_test_cart = sum((test$`gross value` - baseline_train_cart)^2)
+OSR2_cart = 1 - SSR_test_cart / SST_test_cart
+OSR2_cart
 
-#### FUNCTION FOR R2 - NOT WORKING
-r2_osr2 <- function(tree, trainData, testData, yvar) {
-  # Like we did for logistic regression, we use the predict() function on the model, 
-  # indicating the data we should predict on with the newdata parameter.
-  PredictTrain = predict(tree, newdata = trainData)
-  PredictTest = predict(tree, newdata = testData)
-  
-  # Let us compute R2 for both the training and test set
-  # First we create a baseline model, which is the average of the training set reimbursements.
-  ymean = mean(trainData[,yvar])
-  
-  # Then we can compute SSE and SST - the sum of square residuals between the
-  # predictions and the truth vs the baseline and the truth
-  SSETrain = sum((trainData[,yvar] - PredictTrain)^2)
-  SSTTrain = sum((trainData[,yvar] - ymean)^2)
-  # R2 is 1 minus the ratio of these terms
-  R2 = 1 - SSETrain/SSTTrain
-  print(paste0("R2=",R2))
-  
-  # We compute the out of sample R2 similarly, using predictTest and claimsTest
-  # instead of the corresponding training sets
-  # Remember that we keep the baseline *the same* as in the training set.
-  # Using the testset true values would be cheating!
-  SSETest = sum((testData[,yvar] - PredictTest)^2)
-  SSTTest = sum((testData[,yvar] - ymean)^2)
-  OSR2 = 1 - SSETest/SSTTest
-  print(paste0("OSR2=",OSR2))
-}
+### RANDOM FOREST
+skim(train)
+rf_data <- subset(train, select=-c(movie_id, primaryTitle, year))
+rf_data <- rf_data %>% filter(is.na(director) == FALSE)
+rf_data <- rf_data %>% filter(is.na(start) == FALSE)
+rf_data <- rf_data %>% filter(is.na(rating) == FALSE)
+rf_data <- rf_data %>% filter(is.na(company) == FALSE)
+rf_data <- rf_data %>% filter(is.na(writer) == FALSE)
 
-r2_osr2(cart.model, train, test, `gross value`)
+skim(rf_data)
+
+train.rf.oob <- train(y = rf_data$gross.value,
+                  x = subset(rf_data, select=-c(gross.value)),
+                      method="rf",
+                      ntree=500, nodesize=25,
+                      tuneGrid=data.frame(mtry=seq(20,30,2)),
+                      trControl=trainControl(method="oob") )
+plot(train.rf.oob$results$Rsquared, train.rf.oob$results$mtry)
+train.rf.oob$bestTune
+
