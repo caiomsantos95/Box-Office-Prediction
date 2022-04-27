@@ -17,6 +17,7 @@ movies <- readr::read_csv("imdb_movies.csv")
 #head(movies)
 #tail(movies )
 #head(web_scrapping)
+df_2020_2021 <- readr::read_csv("movies_2020_2021.csv")
 df_2018_2019 <-readr::read_csv("movies_2018_2019.csv")
 df_2016_17 <- readr::read_csv("movies_2016_2017.csv")
 df_2015 <- readr::read_csv("movies_2015.csv")
@@ -38,7 +39,8 @@ web_4 <- union(web_3, df_2010_2013)
 web_5 <- union(web_4, df_2009)
 web_6 <- union(web_5, df_2008)
 web_7 <- union (web_6, df_2000_2004)
-web_scrapping <- union(web_7, df_2005_2007)
+web_8 <- union(web_7, df_2020_2021)
+web_scrapping <- union(web_8, df_2005_2007)
 
 summary(web_scrapping)
 
@@ -52,6 +54,7 @@ df$released <- gsub(",","", df$released)
 df$released <- gsub("(United States)","", df$released)
 df$released <- substr(df$released,1,nchar(df$released)-2)
 df$released <- as.Date(df$released, "%B %d %Y")
+
 
 ###ADJUSTING IDs
 #df$URL_new <- str_match(df$movie_url, "title/\\s*(.*?)\\s*/?ref")
@@ -197,8 +200,8 @@ hist_year <- hist(df_usd$year_widely_released)
 #head(df_usd)
 ## splitting dataset
 train <- filter(df_usd, released <= "2017-12-31" & released >= "2000-01-01")
-test <- filter(df_usd, released >= "2018-01-01" & released <= "2019-12-31")
-test_pandemic <- filter(df_usd, released >= "2020-01-01")
+test <- filter(df_usd, released >= "2018-01-01" & released <= "2020-03-15")
+test_pandemic <- filter(df_usd, released >= "2020-03-15")
 #summary(train)
 skim(train)
 #view(test)
@@ -224,7 +227,7 @@ practice_1 <- sapply(lapply(practice, unique), length)
 practice_1
 
 lm.2 <- lm(
-  train$gross.value ~ train$budget.value, train$week_widely_released, train$runtimeMinutes, train$comedy,
+  train$gross.value ~ train$budget.value, train$week_widely_released, train$runtimeMinutes,
   data = train)
 summary(lm.2)
 
@@ -241,7 +244,10 @@ OSR2_2
 
 ########################################################################################################################################################################################################################
 
-### CART MODEL
+#####################
+### CART MODEL ######
+#####################
+
 library(rpart.plot)
 cv.trees <- train(y = train$gross.value,
                   x = subset(train, select=-c(gross.value, movie_id, primaryTitle, gross.currency, year_widely_released, year, director_adjusted, star_adjusted, writer_adjusted, company_adjusted)),
@@ -254,6 +260,7 @@ cv.results
 
 cart.model <- rpart(train$gross.value ~. -gross.value - movie_id - primaryTitle - gross.currency - year_widely_released - year - director_adjusted - star_adjusted - writer_adjusted - company_adjusted, data = train, control = rpart.control(cp = 0.0064))
 prp(cart.model, digits = 2, type = 2)
+
 
 ### R2
 pred_train_cart = predict(cart.model, newdata=train)
@@ -283,9 +290,34 @@ barplot( tail( sort(CART_importance_scores), n_variables ),
          main = paste("CART - top", n_variables, "importance scores"),
          cex.names =.7)
 
+
+### SIMPLIFIED CART MODEL
+cart.model_s <- rpart(train$gross.value ~. -gross.value - movie_id - primaryTitle - gross.currency - year_widely_released - year - director_adjusted - star_adjusted - writer_adjusted - company_adjusted, data = train, control = rpart.control(cp = 0.005))
+prp(cart.model_s, digits = 2, type = 2)
+
+### R2
+pred_train_cart_s = predict(cart.model_s, newdata=train)
+pred_test_cart_s <- predict(cart.model_s, newdata=test)
+pred_test_cart_pandemic_s <- predict(cart.model_s, newdata=test_pandemic)
+
+###TEST
+baseline_train_cart_s = mean(train$gross.value)
+
+SSR_test_cart_s = sum((test$gross.value - pred_test_cart_s)^2)
+SST_test_cart_s = sum((test$gross.value - baseline_train_cart_s)^2)
+OSR2_cart_s = 1 - SSR_test_cart_s / SST_test_cart_s
+OSR2_cart_s
+
+###TEST PANDEMIC
+SSR_test_cart_pandemic_s = sum((test_pandemic$gross.value - pred_test_cart_pandemic_s)^2)
+SST_test_cart_pandemic_s = sum((test_pandemic$gross.value - baseline_train_cart_s)^2)
+OSR2_cart_pandemic_s = 1 - SSR_test_cart_pandemic_s / SST_test_cart_pandemic_s
+OSR2_cart_pandemic_s
+
 #####################
 ### RANDOM FOREST####
 #####################
+
 skim(train)
 rf_data <- subset(train, select=-c(movie_id, primaryTitle, gross.currency, year_widely_released, 
                                    year, director_adjusted, star_adjusted, writer_adjusted, company_adjusted, country))
