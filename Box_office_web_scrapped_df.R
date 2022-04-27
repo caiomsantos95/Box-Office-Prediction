@@ -114,20 +114,20 @@ df <- data.frame(df)
 ### DIRECTORS
 df <- df %>% group_by(df$director) %>% mutate(director_count=n())
 #df <- df %>% filter(director_count >= "5")
-df$director_adjusted <-ifelse(df$director_count < 7, "Other Director", df$director)
+df$director_adjusted <-ifelse(df$director_count < 9, "Other Director", df$director)
 hist(df$director_count)
 table(df$director)
 
 ### STARS
 df <- df %>% group_by(df$star) %>% mutate(star_count=n())
 #df <- df %>% filter(director_count >= "8")
-df$star_adjusted <-ifelse(df$star_count < 8, "Other Star", df$star)
+df$star_adjusted <-ifelse(df$star_count < 14, "Other Star", df$star)
 hist(df$star_count)
 
 ### WRITERS
 df <- df %>% group_by(df$writer) %>% mutate(writer_count=n())
 #df <- df %>% filter(director_count >= "8")
-df$writer_adjusted <-ifelse(df$writer_count < 5, "Other Writer", df$writer)
+df$writer_adjusted <-ifelse(df$writer_count < 7, "Other Writer", df$writer)
 hist(df$writer_count)
 
 ### COMPANIES
@@ -197,9 +197,10 @@ hist_year <- hist(df_usd$year_widely_released)
 #head(df_usd)
 ## splitting dataset
 train <- filter(df_usd, released <= "2017-12-31" & released >= "2000-01-01")
-test <- filter(df_usd, released >= "2018-01-01")
+test <- filter(df_usd, released >= "2018-01-01" & released <= "2019-12-31")
+test_pandemic <- filter(df_usd, released >= "2020-01-01")
 #summary(train)
-#skim(train)
+skim(train)
 #view(test)
 #view(train)
 
@@ -214,11 +215,16 @@ hist_week_train <- hist(train$week_widely_released)
 
 ### LINEAR REGRESSION - NOT WORKING
 lm.1 <- lm(
-  train$gross.value ~ .,  data = train)
+  train$gross.value ~ . - movie_id - gross.currency - primaryTitle - director_adjusted - star_adjusted - writer_adjusted - company_adjusted -isAdult,  data = train)
 summary(lm.1)
 
+### DEBUGGING
+practice <- train
+practice_1 <- sapply(lapply(practice, unique), length)
+practice_1
+
 lm.2 <- lm(
-  train$gross.value ~ train$budget.value, train$week_widely_released, train$runtimeMinutes, train$director_count, train$director_adjusted,
+  train$gross.value ~ train$budget.value, train$week_widely_released, train$runtimeMinutes, train$comedy,
   data = train)
 summary(lm.2)
 
@@ -241,23 +247,32 @@ cv.trees <- train(y = train$gross.value,
                   x = subset(train, select=-c(gross.value, movie_id, primaryTitle, gross.currency, year_widely_released, year, director_adjusted, star_adjusted, writer_adjusted, company_adjusted)),
                   method = "rpart", 
                   trControl = trainControl(method = "cv", number = 10), 
-                  tuneGrid = data.frame(.cp = seq(.00001,.0003,.000001)))
+                  tuneGrid = data.frame(.cp = seq(.0001,.1,.0001)))
 cv.trees$bestTune
 cv.results = cv.trees$results
 cv.results
 
-cart.model <- rpart(train$gross.value ~. -gross.value - movie_id - primaryTitle - gross.currency - year_widely_released - year - director_adjusted - star_adjusted - writer_adjusted - company_adjusted, data = train, control = rpart.control(cp = 0.000263))
+cart.model <- rpart(train$gross.value ~. -gross.value - movie_id - primaryTitle - gross.currency - year_widely_released - year - director_adjusted - star_adjusted - writer_adjusted - company_adjusted, data = train, control = rpart.control(cp = 0.0064))
 prp(cart.model, digits = 2, type = 2)
 
 ### R2
 pred_train_cart = predict(cart.model, newdata=train)
 pred_test_cart <- predict(cart.model, newdata=test)
+pred_test_cart_pandemic <- predict(cart.model, newdata=test_pandemic)
+
+###TEST
+baseline_train_cart = mean(train$gross.value)
 
 SSR_test_cart = sum((test$gross.value - pred_test_cart)^2)
-baseline_train_cart = mean(train$gross.value)
 SST_test_cart = sum((test$gross.value - baseline_train_cart)^2)
 OSR2_cart = 1 - SSR_test_cart / SST_test_cart
 OSR2_cart
+
+###TEST PANDEMIC
+SSR_test_cart_pandemic = sum((test_pandemic$gross.value - pred_test_cart_pandemic)^2)
+SST_test_cart_pandemic = sum((test_pandemic$gross.value - baseline_train_cart)^2)
+OSR2_cart_pandemic = 1 - SSR_test_cart_pandemic / SST_test_cart_pandemic
+OSR2_cart_pandemic
 
 CART_importance_scores = cart.model$variable.importance
 n_variables = 20 # how many variables to display?
@@ -268,10 +283,12 @@ barplot( tail( sort(CART_importance_scores), n_variables ),
          main = paste("CART - top", n_variables, "importance scores"),
          cex.names =.7)
 
-### RANDOM FOREST
+#####################
+### RANDOM FOREST####
+#####################
 skim(train)
 rf_data <- subset(train, select=-c(movie_id, primaryTitle, gross.currency, year_widely_released, 
-                                   year, director_adjusted, star_adjusted, writer_adjusted, company_adjusted))
+                                   year, director_adjusted, star_adjusted, writer_adjusted, company_adjusted, country))
 #rf_data <- rf_data %>% filter(is.na(director) == FALSE)
 #rf_data <- rf_data %>% filter(is.na(start) == FALSE)
 #rf_data <- rf_data %>% filter(is.na(rating) == FALSE)
@@ -284,8 +301,41 @@ train.rf.oob <- train(y = rf_data$gross.value,
                   x = subset(rf_data, select=-c(gross.value)),
                       method="rf",
                       ntree=500, nodesize=25,
-                      tuneGrid=data.frame(mtry=seq(20,30,2)),
+                      tuneGrid=data.frame(mtry=seq(1,20,1)),
                       trControl=trainControl(method="oob") )
 plot(train.rf.oob$results$Rsquared, train.rf.oob$results$mtry)
 train.rf.oob$bestTune
 
+library(randomForest)
+rf.md1 <- randomForest(rf_data$gross.value~., data=subset(rf_data, select=-c(gross.value)), nodesize=25, ntree=500, mtry = 10)
+
+
+### Variable importance with the random forest
+# RF variable importance
+RF_importance_scores <- rf.md1$importance[,1]
+n_variables = 20 # how many variables to display?
+barplot( tail( sort(RF_importance_scores), n_variables ),
+         beside = TRUE,
+         horiz = TRUE,
+         las=1,
+         main = paste("Random Forest - top", n_variables, "importance scores"),
+         cex.names =.7)
+
+### R2
+pred_train_rf = predict(rf.md1, newdata=train)
+pred_test_rf <- predict(rf.md1, newdata=test)
+pred_test_rf_pandemic <- predict(rf.md1, newdata=test_pandemic)
+
+###TEST
+baseline_train_rf = mean(train$gross.value)
+
+SSR_test_rf = sum((test$gross.value - pred_test_rf)^2)
+SST_test_rf = sum((test$gross.value - baseline_train_rf)^2)
+OSR2_rf = 1 - SSR_test_rf / SST_test_rf
+OSR2_rf
+
+###TEST PANDEMIC
+SSR_test_rf_pandemic = sum((test_pandemic$gross.value - pred_test_rf_pandemic)^2)
+SST_test_rf_pandemic = sum((test_pandemic$gross.value - baseline_train_rf)^2)
+OSR2_rf_pandemic = 1 - SSR_test_rf_pandemic / SST_test_rf_pandemic
+OSR2_rf_pandemic
