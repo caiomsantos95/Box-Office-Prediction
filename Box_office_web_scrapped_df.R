@@ -25,6 +25,9 @@ df_2010_2013 <-  readr::read_csv("movies_2010_2013.csv")
 df_2009 <-  readr::read_csv("movies_2009.csv")
 df_2008 <-  readr::read_csv("movies_2008.csv")
 df_2005_2007 <-  readr::read_csv("movies_2005_2008.csv")
+df_2000_2004 <-  readr::read_csv("movies_2000_2005.csv")
+df_2000_2004 <- df_2000_2004 %>% filter(year == "2000" | year == "2001"| year == "2002" | year == "2003" | year == "2004")
+view(df_2000_2004)
 view(df_2005_2007)
 
 ### STACKING ALL DATABASES TOGETHER
@@ -34,7 +37,8 @@ web_3 <- union(web_2, df_2014)
 web_4 <- union(web_3, df_2010_2013)
 web_5 <- union(web_4, df_2009)
 web_6 <- union(web_5, df_2008)
-web_scrapping <- union(web_6, df_2005_2007)
+web_7 <- union (web_6, df_2000_2004)
+web_scrapping <- union(web_7, df_2005_2007)
 
 summary(web_scrapping)
 
@@ -110,7 +114,7 @@ df <- data.frame(df)
 ### DIRECTORS
 df <- df %>% group_by(df$director) %>% mutate(director_count=n())
 #df <- df %>% filter(director_count >= "5")
-df$director_adjusted <-ifelse(df$director_count < 5, "Other Director", df$director)
+df$director_adjusted <-ifelse(df$director_count < 7, "Other Director", df$director)
 hist(df$director_count)
 table(df$director)
 
@@ -176,6 +180,10 @@ df_usd$company <- factor(df_usd$company_adjusted)
 
 skim(df_usd)
 
+### REMOVE LAST MISSING VALUES
+df_usd <- df_usd %>% filter(is.na(released) == FALSE)
+df_usd <- df_usd %>% filter(is.na(country) == FALSE)
+
 ######################################
 ##### DATA EXPLORATION ###############
 ######################################
@@ -197,6 +205,8 @@ view(train)
 
 
 hist_year_train <- hist(train$year_widely_released)
+hist_week_train <- hist(train$week_widely_released)
+
 
 ########################################################################################################################################################
 ##### MODEL ############################################################################################################################################
@@ -217,9 +227,9 @@ summary(lm.2)
 pred_train = predict(lm.2, newdata=train)
 pred_test <- predict(lm.2, newdata=test)
 
-SSR_test2 = sum((test$`gross value` - pred_test)^2)
-baseline_train = mean(train$`gross value`)
-SST_test2 = sum((test$`gross value` - baseline_train)^2)
+SSR_test2 = sum((test$gross.value - pred_test)^2)
+baseline_train = mean(train$gross.value)
+SST_test2 = sum((test$gross.value - baseline_train)^2)
 OSR2_2 = 1 - SSR_test2 / SST_test2
 OSR2_2
 
@@ -227,8 +237,8 @@ OSR2_2
 
 ### CART MODEL
 library(rpart.plot)
-cv.trees <- train(y = train$`gross value`,
-                  x = subset(train, select=-c(`gross value`, movie_id, primaryTitle, `budget currency`, `gross currency`, startYear, year_widely_released, year, rating, company, writer)),
+cv.trees <- train(y = train$gross.value,
+                  x = subset(train, select=-c(gross.value, movie_id, primaryTitle, gross.currency, year_widely_released, year, director_adjusted, star_adjusted, writer_adjusted, company_adjusted)),
                   method = "rpart", 
                   trControl = trainControl(method = "cv", number = 10), 
                   tuneGrid = data.frame(.cp = seq(.00001,.0003,.000001)))
@@ -236,27 +246,37 @@ cv.trees$bestTune
 cv.results = cv.trees$results
 cv.results
 
-cart.model <- rpart(train$`gross value` ~. -`gross value` - movie_id - primaryTitle - `budget currency` - `gross currency` - startYear - year_widely_released - year - rating - company - writer, data = train, control = rpart.control(cp = 0.000254))
+cart.model <- rpart(train$gross.value ~. -gross.value - movie_id - primaryTitle - gross.currency - year_widely_released - year - director_adjusted - star_adjusted - writer_adjusted - company_adjusted, data = train, control = rpart.control(cp = 0.000263))
 prp(cart.model, digits = 2, type = 2)
 
 ### R2
 pred_train_cart = predict(cart.model, newdata=train)
 pred_test_cart <- predict(cart.model, newdata=test)
 
-SSR_test_cart = sum((test$`gross value` - pred_test_cart)^2)
-baseline_train_cart = mean(train$`gross value`)
-SST_test_cart = sum((test$`gross value` - baseline_train_cart)^2)
+SSR_test_cart = sum((test$gross.value - pred_test_cart)^2)
+baseline_train_cart = mean(train$gross.value)
+SST_test_cart = sum((test$gross.value - baseline_train_cart)^2)
 OSR2_cart = 1 - SSR_test_cart / SST_test_cart
 OSR2_cart
 
+CART_importance_scores = cart.model$variable.importance
+n_variables = 20 # how many variables to display?
+barplot( tail( sort(CART_importance_scores), n_variables ),
+         beside = TRUE,
+         horiz = TRUE,
+         las=1,
+         main = paste("CART - top", n_variables, "importance scores"),
+         cex.names =.7)
+
 ### RANDOM FOREST
 skim(train)
-rf_data <- subset(train, select=-c(movie_id, primaryTitle, year))
-rf_data <- rf_data %>% filter(is.na(director) == FALSE)
-rf_data <- rf_data %>% filter(is.na(start) == FALSE)
-rf_data <- rf_data %>% filter(is.na(rating) == FALSE)
-rf_data <- rf_data %>% filter(is.na(company) == FALSE)
-rf_data <- rf_data %>% filter(is.na(writer) == FALSE)
+rf_data <- subset(train, select=-c(movie_id, primaryTitle, gross.currency, year_widely_released, 
+                                   year, director_adjusted, star_adjusted, writer_adjusted, company_adjusted))
+#rf_data <- rf_data %>% filter(is.na(director) == FALSE)
+#rf_data <- rf_data %>% filter(is.na(start) == FALSE)
+#rf_data <- rf_data %>% filter(is.na(rating) == FALSE)
+#rf_data <- rf_data %>% filter(is.na(company) == FALSE)
+#rf_data <- rf_data %>% filter(is.na(writer) == FALSE)
 
 skim(rf_data)
 
