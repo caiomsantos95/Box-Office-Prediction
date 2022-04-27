@@ -14,9 +14,9 @@ library(rpart)
 
 ####DATASETS
 movies <- readr::read_csv("imdb_movies.csv")
-head(movies)
-tail(movies )
-head(web_scrapping)
+#head(movies)
+#tail(movies )
+#head(web_scrapping)
 df_2018_2019 <-readr::read_csv("movies_2018_2019.csv")
 df_2016_17 <- readr::read_csv("movies_2016_2017.csv")
 df_2015 <- readr::read_csv("movies_2015.csv")
@@ -27,8 +27,8 @@ df_2008 <-  readr::read_csv("movies_2008.csv")
 df_2005_2007 <-  readr::read_csv("movies_2005_2008.csv")
 df_2000_2004 <-  readr::read_csv("movies_2000_2005.csv")
 df_2000_2004 <- df_2000_2004 %>% filter(year == "2000" | year == "2001"| year == "2002" | year == "2003" | year == "2004")
-view(df_2000_2004)
-view(df_2005_2007)
+#view(df_2000_2004)
+#view(df_2005_2007)
 
 ### STACKING ALL DATABASES TOGETHER
 web_1 <- union(df_2018_2019, df_2016_17) 
@@ -140,16 +140,16 @@ hist(df$company_count)
 df$runtimeMinutes <- as.numeric(df$runtimeMinutes)
 
 ### CREATE CURRENCY EXCHANGE RATE TABLE TO UPDATE VALUES FROM INTERNATIONAL MOVIES - REPLICATE FOR ALL CURRENCIES
-install.packages("priceR")
-library(priceR)
-USD_GBP <- historical_exchange_rates("USD", to = "GBP", start_date = "2010-01-01", end_date = "2010-12-31")
-USD_GBP$year <- year(USD_GBP$date)
-table(USD_GBP$year, mean(USD_GBP$one_USD_equivalent_to_x_GBP))
+#install.packages("priceR")
+#library(priceR)
+#USD_GBP <- historical_exchange_rates("USD", to = "GBP", start_date = "2010-01-01", end_date = "2010-12-31")
+#USD_GBP$year <- year(USD_GBP$date)
+#table(USD_GBP$year, mean(USD_GBP$one_USD_equivalent_to_x_GBP))
 
-summary <- summarise(USD_GBP, group_by(USD_GBP$year), avg_USD_GBP = mean(USD_GBP$one_USD_equivalent_to_x_GBP))
+#summary <- summarise(USD_GBP, group_by(USD_GBP$year), avg_USD_GBP = mean(USD_GBP$one_USD_equivalent_to_x_GBP))
 
 ### ORDERING RATING
-unique(df$rating)
+#unique(df$rating)
 df$rating <- ifelse(df$rating == "Not Rated" | is.na(df$rating) == TRUE , "Unrated", df$rating)
 rating.levels = c("G", "PG", "PG-13", "NC-17", "R", "Unrated")
 df$rating <- factor(df$rating, ordered=TRUE, levels=rating.levels)
@@ -194,14 +194,14 @@ hist_year <- hist(df_usd$year_widely_released)
 ###########################
 ##### SPLITTING DATASET#### 
 ###########################
-head(df_usd)
+#head(df_usd)
 ## splitting dataset
 train <- filter(df_usd, released <= "2017-12-31" & released >= "2000-01-01")
 test <- filter(df_usd, released >= "2018-01-01")
-summary(train)
-skim(train)
-view(test)
-view(train)
+#summary(train)
+#skim(train)
+#view(test)
+#view(train)
 
 
 hist_year_train <- hist(train$year_widely_released)
