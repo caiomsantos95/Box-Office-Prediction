@@ -1,17 +1,6 @@
 library(glmnet)
-library(dplyr)
-library(Hmisc)
-
-library(ggplot2)
-library(readr)
-library(broom)
-library(lattice)
-library(Rcpp)
-library(caret)
-
-
 library(rpart)
-
+library(caret)
 library(tidyverse)
 library(stringr)
 library(skimr)
@@ -99,8 +88,6 @@ df <- merge(x = df, y = document_terms, by.x = 0, by.y = 0)
 
 ### ADJUSTING DIRECTORS, STAR, WRITERS AND COMPANIES
 df <- data.frame(df)
-
-df2 <- df
 
 ### DIRECTORS
 director_count <- df %>% group_by(df$director) %>% summarize(director_count=n())
@@ -232,12 +219,20 @@ lin <- lm(gross_log~.-released-year,data=train)
 
 pred_train = predict(lin, newdata=train)
 pred_test <- predict(lin, newdata=test)
+pred_test_pandemic <- predict(lin, newdata=test_pandemic)
 
 SSR_test = sum((test$gross_log - pred_test)^2)
 baseline_train = mean(train$gross_log)
 SST_test = sum((test$gross_log - baseline_train)^2)
 OSR2_ = 1 - SSR_test / SST_test
 OSR2_
+
+SSR_test_pandemic = sum((test_pandemic$gross_log - pred_test_pandemic)^2)
+SST_test_pandemic = sum((test_pandemic$gross_log - baseline_train)^2)
+OSR2_pandemic = 1 - SSR_test_pandemic / SST_test_pandemic
+OSR2_pandemic
+
+summary(lin)
 
 ########################################################################################################################################################################################################################
 
@@ -251,12 +246,19 @@ x.train=model.matrix(gross_log~.-year-released,data=train)
 y.train=train$gross_log
 x.test=model.matrix(gross_log~.-year-released,data=test)
 y.test=test$gross_log
+x.test_pandemic=model.matrix(gross_log~.-year-released,data=test_pandemic)
+y.test_pandemic=test_pandemic$gross_log
 
 x.train.scl = scale(x.train)
 x.test.scl = x.test
+x.test_pandemic.scl = x.test_pandemic
 
 for(i in 1:ncol(x.test)){
   x.test.scl[,i] <- (x.test[,i] - attr(x.train.scl, 'scaled:center')[i])/ attr(x.train.scl, 'scaled:scale')[i]
+}
+
+for(i in 1:ncol(x.test_pandemic)){
+  x.test_pandemic.scl[,i] <- (x.test_pandemic[,i] - attr(x.train.scl, 'scaled:center')[i])/ attr(x.train.scl, 'scaled:scale')[i]
 }
 
 all.lambdas <- c(exp(seq(15, -10, -.1)))
@@ -296,6 +298,7 @@ r2_osr2_glmnet <- function(tree, trainData, testData, trainY, testY, lambda) {
 }
 
 r2_osr2_glmnet(ridge.model,x.train.scl,x.test.scl,y.train,y.test,best.lambda.ridge)
+r2_osr2_glmnet(ridge.model,x.train.scl,x.test_pandemic.scl,y.train,y.test_pandemic,best.lambda.ridge)
 
 ### LASSO REGRESSION
 lasso.cv=cv.glmnet(x.train.scl, y.train, alpha=1, lambda=all.lambdas)
@@ -303,6 +306,7 @@ plot(lasso.cv, main="Ridge regression MSE\n")
 best.lambda.lasso <- lasso.cv$lambda.min 
 lasso.model=glmnet(x.train.scl,y.train,alpha=0,lambda=best.lambda.lasso)
 r2_osr2_glmnet(lasso.model,x.train.scl,x.test.scl,y.train,y.test,best.lambda.lasso)
+r2_osr2_glmnet(lasso.model,x.train.scl,x.test_pandemic.scl,y.train,y.test_pandemic,best.lambda.lasso)
 
 #####################
 ### CART MODEL ######
@@ -322,10 +326,17 @@ cart.model <- rpart(gross_log ~. -gross_log-year-released, data = train, control
 prp(cart.model, digits = 2, type = 2)
 
 
+
 ### R2
 pred_train_cart = predict(cart.model, newdata=train)
 pred_test_cart <- predict(cart.model, newdata=test)
 pred_test_cart_pandemic <- predict(cart.model, newdata=test_pandemic)
+
+###IN SAMPLE
+SSR_train_cart = sum((train$gross_log - pred_train_cart)^2)
+SST_train_cart = sum((train$gross_log - baseline_train_cart)^2)
+ISR2_cart = 1 - SSR_train_cart / SST_train_cart
+ISR2_cart
 
 ###TEST
 baseline_train_cart = mean(train$gross_log)
@@ -350,6 +361,10 @@ barplot( tail( sort(CART_importance_scores), n_variables ),
          main = paste("CART - top", n_variables, "importance scores"),
          cex.names =.7)
 
+var_importance <- data.frame(tail( sort(CART_importance_scores), n_variables ))
+
+
+hist(df$gross_log)
 
 ### SIMPLIFIED CART MODEL
 cart.model_s <- rpart(train$gross_log ~. -gross_log -year -released, data = train, control = rpart.control(cp = 0.005))
@@ -369,8 +384,8 @@ OSR2_cart_s = 1 - SSR_test_cart_s / SST_test_cart_s
 OSR2_cart_s
 
 ###TEST PANDEMIC
-SSR_test_cart_pandemic_s = sum((test_pandemic$gross.value - pred_test_cart_pandemic_s)^2)
-SST_test_cart_pandemic_s = sum((test_pandemic$gross.value - baseline_train_cart_s)^2)
+SSR_test_cart_pandemic_s = sum((test_pandemic$gross_log - pred_test_cart_pandemic_s)^2)
+SST_test_cart_pandemic_s = sum((test_pandemic$gross_log - baseline_train_cart_s)^2)
 OSR2_cart_pandemic_s = 1 - SSR_test_cart_pandemic_s / SST_test_cart_pandemic_s
 OSR2_cart_pandemic_s
 
@@ -406,10 +421,20 @@ barplot( tail( sort(RF_importance_scores), n_variables ),
          main = paste("Random Forest - top", n_variables, "importance scores"),
          cex.names =.7)
 
+RF_importance_scores <- rf.md1$importance[,1]
+var_importance.rf <- data.frame(RF_importance_scores )
+
 ### R2
 pred_train_rf = predict(rf.md1, newdata=train)
 pred_test_rf <- predict(rf.md1, newdata=test)
 pred_test_rf_pandemic <- predict(rf.md1, newdata=test_pandemic)
+
+SSR_train_rf = sum((y.train - pred_train_rf)^2)
+SST_train_rf = sum((y.train - baseline_train_rf)^2)
+ISR2_rf = 1 - SSR_train_rf / SST_train_rf
+ISR2_rf
+
+
 
 ###TEST
 baseline_train_rf = mean(train$gross_log)
@@ -419,8 +444,52 @@ SST_test_rf = sum((test$gross_log - baseline_train_rf)^2)
 OSR2_rf = 1 - SSR_test_rf / SST_test_rf
 OSR2_rf
 
+plot(10^(pred_test_rf),10^(test$gross_log))
+
 ###TEST PANDEMIC
 SSR_test_rf_pandemic = sum((test_pandemic$gross_log - pred_test_rf_pandemic)^2)
 SST_test_rf_pandemic = sum((test_pandemic$gross_log - baseline_train_rf)^2)
 OSR2_rf_pandemic = 1 - SSR_test_rf_pandemic / SST_test_rf_pandemic
 OSR2_rf_pandemic
+
+
+##################
+#####XGBOOST###### NOT WORKING YET - AUC IS GREAT, BUT SCORE IS TERRIBLE
+##################
+
+##### MODEL 2 - FINE TUNING
+xgb.grid <- expand.grid(nrounds = seq(130,180,10),
+                        max_depth = seq(1,4,1),
+                        eta = seq(0.2,0.5,.05),
+                        gamma = seq(0,.3,0.05),
+                        colsample_bytree = .8,
+                        min_child_weight = 1,
+                        subsample = 1)
+
+classif <- train(y = y.train,
+                  x = x.train,
+                  method = "xgbTree",
+                  trControl = trainControl(method="cv", number=5),
+                  tuneGrid=xgb.grid,
+)
+
+classif$bestTune
+pred_train_xgb <- predict(classif, newdata=x.train)
+pred_test_xgb <- predict(classif, newdata=x.test)
+plot(y.test,pred_test_xgb)
+
+###TEST
+baseline_train_xgb = mean(y.train)
+
+SSR_train_xgb = sum((y.train - pred_train_xgb)^2)
+SST_train_xgb = sum((y.train - baseline_train_xgb)^2)
+ISR2_xgb = 1 - SSR_train_xgb / SST_train_xgb
+ISR2_xgb
+
+
+SSR_test_xgb = sum((y.test - pred_test_xgb)^2)
+SST_test_xgb = sum((y.test - baseline_train_xgb)^2)
+OSR2_xgb = 1 - SSR_test_xgb / SST_test_xgb
+OSR2_xgb
+
+log.loss(pred1[,2],test_takeup)
